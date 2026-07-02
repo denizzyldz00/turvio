@@ -137,7 +137,10 @@ async function renderTourList() {
       '<span class="del">🗑 Sil</span>';
     card.querySelector('h3').textContent = tour.name || 'İsimsiz Tur';
 
-    card.addEventListener('click', () => openTour(tour.id));
+    card.addEventListener('click', () => {
+      openTour(tour.id);
+      tryEnterVR(); // kullanici tikladigi an (jest icinde) dogrudan VR'a gir
+    });
     card.querySelector('.del').addEventListener('click', async (e) => {
       e.stopPropagation();
       if (confirm('"' + (tour.name || 'Tur') + '" silinsin mi?')) {
@@ -209,6 +212,7 @@ elFileInput.addEventListener('change', async () => {
 let currentTour = null;
 let currentSceneId = null;
 let transitioning = false;
+let vrSupported = false; // baslangicta ogrenilir; tura tiklayinca dogrudan VR icin
 
 // Aci -> 3B konum (Pannellum yaw/pitch ile hizali; a-sky "0 -90 0")
 function sphericalToPosition(pitchDeg, yawDeg) {
@@ -257,22 +261,38 @@ function makeHotspotImage(title) {
 }
 
 // Panoramayi karartip/aydinlatarak yumusak gecis.
-// ONEMLI: window.requestAnimationFrame IMMERSIVE VR oturumunda CALISMAZ
-// (kare dongusunu WebXR devralir) -> gecis rAF ile yapilirsa gozlukte takilir.
-// Bu yuzden gecis, VR'da da calisan bir zamanlayici (setInterval) ile surulur;
-// A-Frame XR ciziciyi her kare render ettigi icin renk degisimi gozlukte gorunur.
-function tweenSkyBrightness(from, to, duration) {
-  return new Promise((resolve) => {
+// ONEMLI: window.requestAnimationFrame (ve kisilebildigi icin setInterval)
+// IMMERSIVE VR'da guvenilmez. EN SAGLAMI A-Frame'in TICK dongusu: A-Frame,
+// VR'da kareleri WebXR ile cizerken tick HER KARE calisir. Bu yuzden gecis
+// 'sky-fader' bileseninin tick'iyle surulur -> gozlukte de sorunsuz calisir.
+AFRAME.registerComponent('sky-fader', {
+  init: function () { this.active = null; },
+  tick: function (time, dt) {
+    const a = this.active;
+    if (!a) return;
+    a.elapsed += (dt || 16);
+    const t = Math.min(a.elapsed / a.duration, 1);
+    const v = a.from + (a.to - a.from) * t;
     const mesh = elSky.getObject3D('mesh');
-    if (!mesh) { resolve(); return; }
-    const start = performance.now();
-    const timer = setInterval(() => {
-      const t = Math.min((performance.now() - start) / duration, 1);
-      const v = from + (to - from) * t;
-      mesh.material.color.setRGB(v, v, v);
-      if (t >= 1) { clearInterval(timer); resolve(); }
-    }, 16);
-  });
+    if (mesh && mesh.material) mesh.material.color.setRGB(v, v, v);
+    if (t >= 1) { const resolve = a.resolve; this.active = null; resolve(); }
+  },
+  fade: function (from, to, duration) {
+    return new Promise((resolve) => {
+      // Onceki gecis bitmeden yenisi gelirse eskiyi cozup birak
+      if (this.active) { const r = this.active.resolve; this.active = null; r(); }
+      this.active = { from: from, to: to, duration: duration, elapsed: 0, resolve: resolve };
+    });
+  }
+});
+
+function tweenSkyBrightness(from, to, duration) {
+  const comp = elScene && elScene.components ? elScene.components['sky-fader'] : null;
+  if (comp) return comp.fade(from, to, duration);
+  // Yedek: bilesen henuz yoksa rengi aninda uygula
+  const mesh = elSky.getObject3D('mesh');
+  if (mesh && mesh.material) mesh.material.color.setRGB(to, to, to);
+  return Promise.resolve();
 }
 
 // ImageBitmap'i a-sky dokusuna uygular. Yon bitmap olusturulurken 'flipY'
@@ -423,6 +443,14 @@ async function loadScene(sceneId, isFirst) {
 // ---------------------------------------------------------------------
 // Ekranlar arasi gecis (menu <-> oynatici)
 // ---------------------------------------------------------------------
+// Gercek VR destekleniyorsa turu dogrudan immersive VR'da acar.
+// enterVR() kullanici jesti (tura tiklama) icinde cagrilmali; o yuzden
+// bu, click isleyicisinde openTour ile birlikte SENKRON cagrilir.
+function tryEnterVR() {
+  if (!vrSupported) return;
+  try { if (elScene && elScene.enterVR) elScene.enterVR(); } catch (e) {}
+}
+
 async function openTour(tourId) {
   const tour = await idbGet('tours', tourId);
   if (!tour) { toast('Tur bulunamadı.'); return; }
@@ -483,6 +511,22 @@ elBackBtn.addEventListener('click', backToHome);
 // Cevrimdisi calisma icin servis calisanini kaydet (https veya localhost'ta calisir)
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+// Surum etiketi: guncellemenin gozluge ulasip ulasmadigini ANA EKRANDA gormek icin.
+// Ana ekranda "Turvio VR · v3" gorunuyorsa yeni surum calisiyordur.
+const APP_VERSION = 'v3';
+const brandSmall = document.querySelector('.brand small');
+if (brandSmall) brandSmall.textContent = 'VR · ' + APP_VERSION;
+
+// Sahne gecis fade'ini suren bileseni sahneye ekle (A-Frame tick ile calisir)
+if (elScene) elScene.setAttribute('sky-fader', '');
+
+// VR destegini onceden ogren (tura tiklayinca dogrudan VR'a girebilmek icin)
+if (navigator.xr && navigator.xr.isSessionSupported) {
+  navigator.xr.isSessionSupported('immersive-vr')
+    .then((s) => { vrSupported = s; })
+    .catch(() => {});
 }
 
 renderTourList();
