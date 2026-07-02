@@ -5,7 +5,7 @@
 // IndexedDB'de saklanir (app.js). PWA olarak kurulum ve APK icin gereklidir.
 // =====================================================================
 
-const CACHE = 'turvio-vr-v1';
+const CACHE = 'turvio-vr-v2';
 const ASSETS = [
   './',
   'index.html',

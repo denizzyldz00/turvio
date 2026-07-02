@@ -256,19 +256,22 @@ function makeHotspotImage(title) {
   return canvas.toDataURL('image/png');
 }
 
-// Panoramayi karartip/aydinlatarak yumusak gecis
+// Panoramayi karartip/aydinlatarak yumusak gecis.
+// ONEMLI: window.requestAnimationFrame IMMERSIVE VR oturumunda CALISMAZ
+// (kare dongusunu WebXR devralir) -> gecis rAF ile yapilirsa gozlukte takilir.
+// Bu yuzden gecis, VR'da da calisan bir zamanlayici (setInterval) ile surulur;
+// A-Frame XR ciziciyi her kare render ettigi icin renk degisimi gozlukte gorunur.
 function tweenSkyBrightness(from, to, duration) {
   return new Promise((resolve) => {
     const mesh = elSky.getObject3D('mesh');
     if (!mesh) { resolve(); return; }
     const start = performance.now();
-    function step(now) {
-      const t = Math.min((now - start) / duration, 1);
+    const timer = setInterval(() => {
+      const t = Math.min((performance.now() - start) / duration, 1);
       const v = from + (to - from) * t;
       mesh.material.color.setRGB(v, v, v);
-      if (t < 1) requestAnimationFrame(step); else resolve();
-    }
-    requestAnimationFrame(step);
+      if (t >= 1) { clearInterval(timer); resolve(); }
+    }, 16);
   });
 }
 
@@ -394,22 +397,27 @@ async function loadScene(sceneId, isFirst) {
   showSpinner();
   elHotspots.setAttribute('visible', false);
 
-  if (!isFirst) await tweenSkyBrightness(1, 0, 400);
+  try {
+    if (!isFirst) await tweenSkyBrightness(1, 0, 400);
 
-  const fileName = String(scene.image || '').split('/').pop();
-  const blob = await idbGet('images', currentTour.id + '/' + fileName);
-  if (blob) {
-    await setSkyFromBlob(blob);
+    const fileName = String(scene.image || '').split('/').pop();
+    const blob = await idbGet('images', currentTour.id + '/' + fileName);
+    if (blob) {
+      await setSkyFromBlob(blob);
+    }
+
+    currentSceneId = sceneId;
+    buildHotspots(sceneId);
+    updateSceneUi(sceneId);
+
+    elHotspots.setAttribute('visible', true);
+    await tweenSkyBrightness(0, 1, 600);
+  } catch (e) {
+    // Gecis sirasinda hata olursa arayuz kilitlenmesin
+  } finally {
+    hideSpinner();
+    transitioning = false;
   }
-
-  currentSceneId = sceneId;
-  buildHotspots(sceneId);
-  updateSceneUi(sceneId);
-
-  elHotspots.setAttribute('visible', true);
-  hideSpinner();
-  await tweenSkyBrightness(0, 1, 600);
-  transitioning = false;
 }
 
 // ---------------------------------------------------------------------
