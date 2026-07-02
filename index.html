@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Turvio VR</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <!-- A-Frame primitifler taninmadan once yuklenmis olmali -->
+  <script src="lib/aframe.min.js"></script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!--
+    VR sahnesi: tur secilene kadar arka planda siyah bekler.
+    - a-sky rotation "0 -90 0": panorama yonu masaustu Pannellum ile hizali
+    - laser-controls: VR kumanda lazeri; cursor(mouse): masaustu/tarayici tiklama
+  -->
+  <a-scene background="color: #000000"
+           webxr="requiredFeatures: local; referenceSpaceType: local"
+           vr-mode-ui="enabled: true"
+           renderer="antialias: true"
+           loading-screen="enabled: false">
+    <a-sky id="sky" color="#000000" rotation="0 -90 0"></a-sky>
+    <a-entity id="hotspots"></a-entity>
+    <a-entity id="camera" camera look-controls="reverseMouseDrag: true" position="0 0 0"></a-entity>
+    <a-entity laser-controls="hand: left" raycaster="objects: .clickable; far: 30"></a-entity>
+    <a-entity laser-controls="hand: right" raycaster="objects: .clickable; far: 30"></a-entity>
+    <a-entity cursor="rayOrigin: mouse" raycaster="objects: .clickable; far: 30"></a-entity>
+  </a-scene>
+
+  <!-- ANA MENU: kayitli turlar + Tur Ekle -->
+  <div id="homeScreen" class="screen">
+    <div class="home-head">
+      <div class="brand">Tur<span>vio</span> <small>VR</small></div>
+      <label class="add-btn">
+        ➕ Tur Ekle
+        <input id="fileInput" type="file" accept=".turvio,application/json" hidden>
+      </label>
+    </div>
+    <div id="tourList" class="tour-list"></div>
+    <div id="homeEmpty" class="home-empty" style="display:none;">
+      <div class="empty-icon">🗂️</div>
+      <p>Henüz tur eklenmemiş.<br>
+      Bilgisayardan dışa aktardığınız <b>.turvio</b> dosyasını<br>
+      yukarıdaki <b>➕ Tur Ekle</b> ile seçin.</p>
+    </div>
+  </div>
+
+  <!-- OYNATICI ARAYUZU (tur secilince gorunur) -->
+  <div id="playerUi" class="player-ui" style="display:none;">
+    <div class="top-bar">
+      <button id="backBtn" class="back-btn">← Turlar</button>
+      <div id="sceneTitle" class="scene-title"></div>
+      <div class="spacer"></div>
+    </div>
+    <div id="vrHint" class="vr-hint"></div>
+    <div class="scene-nav" id="sceneNav"></div>
+    <div id="loadingSpinner" class="loading-spinner"></div>
+  </div>
+
+  <!-- Kisa bilgi/hata baloncugu -->
+  <div id="toast" class="toast" style="display:none;"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
